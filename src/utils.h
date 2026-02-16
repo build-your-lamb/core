@@ -1,8 +1,8 @@
 #ifndef UTILS_H_
 #define UTILS_H_
 
-#include <stddef.h>
 #include <pthread.h>
+#include <stddef.h>
 
 /*
  * utils_queue - utility queue library
@@ -10,11 +10,11 @@
  * part of utils library
  */
 typedef struct {
-    void **buf;          // array of void* (generic)
-    size_t capacity;     // max number of elements
-    size_t head;         // pop index
-    size_t tail;         // push index
-    pthread_mutex_t mtx; // protect head/tail
+  void **buf;          // array of void* (generic)
+  size_t capacity;     // max number of elements
+  size_t head;         // pop index
+  size_t tail;         // push index
+  pthread_mutex_t mtx; // protect head/tail
 } utils_queue_t;
 
 /**
@@ -54,8 +54,9 @@ int utils_queue_pop(utils_queue_t *q, void **item);
 
 #define LOG_LEVEL LEVEL_DEBUG
 
-#define LOG_PRINT(level_tag, fmt, ...) \
-  fprintf(stdout, "%s\t%s\t%d\t" fmt "\n", level_tag, __FILE__, __LINE__, ##__VA_ARGS__)
+#define LOG_PRINT(level_tag, fmt, ...)                                         \
+  fprintf(stdout, "%s\t%s\t%d\t" fmt "\n", level_tag, __FILE__, __LINE__,      \
+          ##__VA_ARGS__)
 
 #if LOG_LEVEL >= LEVEL_DEBUG
 #define LOGD(fmt, ...) LOG_PRINT(DEBUG_TAG, fmt, ##__VA_ARGS__)
@@ -82,4 +83,3 @@ int utils_queue_pop(utils_queue_t *q, void **item);
 #endif
 
 #endif // UTILS_QUEUE_H_
-

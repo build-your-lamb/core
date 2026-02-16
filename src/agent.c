@@ -1,9 +1,4 @@
 
-int agent_connect(const char* url, const char* token) {
+int agent_connect(const char *url, const char *token) { return 0; }
 
-  return 0;
-}
-
-void agent_disconnect() {
-
-}
+void agent_disconnect() {}

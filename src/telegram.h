@@ -3,7 +3,7 @@
 
 #define TOPIC_TELEGRAM_UPDATES "inproc://telegram.updates"
 
-int app_telegram_main();
+int app_telegram_main(void *arg);
 void app_telegram_quit();
 
 #endif // TELEGRAM_H

@@ -38,6 +38,7 @@ add_executable(lamb
     src/webrtc.c
     src/utils.c
     src/telegram.c
+    third_party11/inih/ini.c
     ${MEDIA_SRC}
     protobuf/livekit_models.pb-c.c
     protobuf/livekit_rtc.pb-c.c
