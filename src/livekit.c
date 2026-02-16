@@ -7,7 +7,6 @@
 #include "webrtc.h"
 #include "utlist.h"
 #include "livekit.h"
-#include "media.h"
 #include <nng/protocol/pubsub0/sub.h>
 #include <nng/protocol/pubsub0/pub.h>
 
@@ -308,8 +307,8 @@ int livekit_connect(const char* url, const char* token) {
 }
 
 
-#define TOKEN ""
-#define URL ""
+#define TOKEN "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJleHAiOjE3ODAyNDYwNzcsImlkZW50aXR5IjoiZGV2IiwiaXNzIjoiQVBJRlVDZndhTlZvcVV4IiwibmJmIjoxNzcxMjQ2MDc3LCJzdWIiOiJkZXYiLCJ2aWRlbyI6eyJjYW5QdWJsaXNoIjp0cnVlLCJjYW5QdWJsaXNoRGF0YSI6dHJ1ZSwiY2FuU3Vic2NyaWJlIjp0cnVlLCJyb29tIjoicm9vbSIsInJvb21Kb2luIjp0cnVlfX0.GNnk2Eom1mOaKtMlRo7vLyP101-L1rj0YD91k9ZIxjU"
+#define URL "oem1-4ntfgb0s.livekit.cloud"
 
 
 int app_livekit_main() {

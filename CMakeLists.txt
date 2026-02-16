@@ -15,7 +15,7 @@ if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
         /home/user/Workspace/luckfox-pico/media/out/lib
     )
 else()
-    set(MEDIA_SRC src/test_media.c)
+    set(MEDIA_SRC src/test_video.c)
 endif()
 
 
@@ -38,7 +38,6 @@ add_executable(lamb
     src/webrtc.c
     src/utils.c
     src/telegram.c
-    src/video.c
     ${MEDIA_SRC}
     protobuf/livekit_models.pb-c.c
     protobuf/livekit_rtc.pb-c.c

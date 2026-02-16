@@ -13,7 +13,7 @@
 static volatile bool g_telegram_running = true;
 static nng_socket g_nng_sock; // Global NNG socket to allow closing from app_telegram_quit
 
-#define BOT_TOKEN ""
+#define BOT_TOKEN "8198403553:AAHS9_HXQvsP21-Pbez3YXN7Q0oHFk7Qw3g"
 #define TIMEOUT   10
 
 struct buffer {
@@ -72,7 +72,7 @@ int app_telegram_main(void) {
     int rv;
 
     nng_pub0_open(&g_nng_sock);
-    nng_listen(g_nng_sock, TELEGRAM_UPDATES, NULL, 0);
+    nng_listen(g_nng_sock, TOPIC_TELEGRAM_UPDATES, NULL, 0);
 
     while (g_telegram_running) {
         char url[512];

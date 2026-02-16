@@ -42,11 +42,10 @@ int main(int argc, char *argv[]) {
         return 1;
     }
     nng_socket_set(sock, NNG_OPT_SUB_SUBSCRIBE, "", 0);
-    if ((rv = nng_dial(sock, TELEGRAM_UPDATES, NULL, NNG_FLAG_NONBLOCK)) != 0) {
+    if ((rv = nng_dial(sock, TOPIC_TELEGRAM_UPDATES, NULL, NNG_FLAG_NONBLOCK)) != 0) {
         LOGE("nng_dial: %s", nng_strerror(rv));
         return 1;
     }
-    LOGI("Subscribed to Telegram updates on %s", TELEGRAM_UPDATES);
     while (1) {
 	char *buf = NULL;
         size_t sz;

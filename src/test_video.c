@@ -7,7 +7,10 @@
 #include <nng/nng.h>
 #include <nng/protocol/pubsub0/pub.h>
 #include "utils.h"
+#include "video.h"
 #define FPS 30
+
+
 static int g_video_size = 0;
 static uint8_t* g_video_buf = NULL;
 static uint8_t* g_pps_buf = NULL;
@@ -149,11 +152,10 @@ int app_video_main() {
 
   nng_socket sock;
   nng_pub0_open(&sock);
-  nng_listen(sock, "inproc://video.compressed", NULL, 0);
+  nng_listen(sock, TOPIC_VIDEO_COMPRESSED, NULL, 0);
   while (1) {
 
     if ((frame_buf = video_get_video_frame(&frame_size)) != NULL) {
-      //printf("get a video frame, size: %d [%.2x %.2x %.2x %.2x]\n", frame_size, frame_buf[0], frame_buf[1], frame_buf[2], frame_buf[3]);
       nng_send(sock, frame_buf, frame_size, 0);
       free(frame_buf); 
     }

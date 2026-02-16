@@ -5,7 +5,7 @@
 #include "peer.h"
 #include "stdio.h"
 #include "utils.h"
-#include "media.h"
+#include "video.h"
 #include "nng/nng.h"
 #include "nng/protocol/pubsub0/sub.h"
 PeerConnection* g_subscriber_peer_connection = NULL;
@@ -106,7 +106,7 @@ static void* livekit_webrtc_data_handler_thread(void* userdata) {
   // sub
   nng_sub0_open(&sock);
   nng_socket_set_string(sock, NNG_OPT_SUB_SUBSCRIBE, "");
-  nng_dial(sock, "inproc://video.compressed", NULL, NNG_FLAG_NONBLOCK);
+  nng_dial(sock, TOPIC_VIDEO_COMPRESSED, NULL, NNG_FLAG_NONBLOCK);
 
   while (!g_terminate) {
     uint8_t* buf = NULL;
