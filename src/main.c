@@ -1,5 +1,5 @@
 #include "ini.h" // For inih library
-#include "livekit.h"
+#include "meet.h"
 #include "telegram.h"
 #include "utils.h"
 #include "video.h"
@@ -132,20 +132,21 @@ int main(int argc, char *argv[]) {
     int rv = nng_recv(sock, &buf, &sz, NNG_FLAG_ALLOC);
     printf("Received message: %.*s\n", (int)sz, buf);
     if (buf && strncmp(buf, "/meet", 5) == 0) {
-      LiveKitArgs *lk_args = (LiveKitArgs *)malloc(sizeof(LiveKitArgs));
-      if (!lk_args) {
-        LOGE("Failed to allocate LiveKitArgs");
+      MeetArgs *meet_args = (MeetArgs *)malloc(sizeof(MeetArgs));
+      if (!meet_args) {
+        LOGE("Failed to allocate MeetArgs");
         free(buf);
         continue;
       }
-      lk_args->url = g_app_config.livekit_url;
-      lk_args->token = g_app_config.livekit_token;
-      start_app((app_main_func_t)app_livekit_main, "LiveKit", (void *)lk_args);
+      meet_args->url = g_app_config.livekit_url;
+      meet_args->token = g_app_config.livekit_token;
+      start_app((app_main_func_t)AppMeetMain, "LiveKit", (void *)meet_args);
     }
     free(buf);
   }
 
   app_telegram_quit();
+  AppMeetQuit();
   nng_close(sock);
 
   // Free allocated config strings

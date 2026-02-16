@@ -34,8 +34,8 @@ link_directories(
 
 add_executable(lamb
     src/main.c
-    src/livekit.c
-    src/webrtc.c
+    src/meet.c
+
     src/utils.c
     src/telegram.c
     third_party11/inih/ini.c
