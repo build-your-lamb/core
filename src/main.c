@@ -40,7 +40,9 @@ static int config_ini_handler(void *user, const char *section, const char *name,
   } else if (MATCH("livekit", "url")) {
     pconfig->livekit_url = strdup(value);
   } else if (MATCH("livekit", "token")) {
+
     pconfig->livekit_token = strdup(value);
+    LOGI("Loaded LiveKit token: %s", pconfig->livekit_token);
   } else {
     return 0; // Unknown section/name, error
   }

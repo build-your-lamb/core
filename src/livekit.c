@@ -286,7 +286,6 @@ int livekit_connect(const char *url, const char *token) {
 
   while (1) {
     lws_service(context, 1);
-    printf("end of lws_service loop\n");
     // sub
     uint8_t *video_msg;
 #if 0

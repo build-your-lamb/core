@@ -66,3 +66,4 @@ EXternalProject_Add(nng
 )
 
 add_dependencies(lamb libpeer nng)
+add_compile_definitions(INI_MAX_LINE=10000)
