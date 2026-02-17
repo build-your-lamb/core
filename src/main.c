@@ -1,9 +1,9 @@
+#include "agent.h"
 #include "ini.h" // For inih library
 #include "meet.h"
 #include "telegram.h"
 #include "utils.h"
 #include "video.h"
-#include "agent.h"
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
 #include <nng/nng.h>
@@ -126,8 +126,8 @@ int main(int argc, char *argv[]) {
   // Start video processing (assuming it doesn't need config directly from ini
   // for now)
   start_app((app_main_func_t)app_video_main, "video processing", NULL);
-  start_app((app_main_func_t)app_agent_main, "Agent", (void *)g_app_config.openai_api_key);
-
+  start_app((app_main_func_t)app_agent_main, "Agent",
+            (void *)g_app_config.openai_api_key);
 
   if ((rv = nng_sub0_open(&sock)) != 0) {
     LOGE("nng_sub0_open: %s", nng_strerror(rv));
@@ -146,8 +146,8 @@ int main(int argc, char *argv[]) {
     printf("Received message: %.*s\n", (int)sz, buf);
     if (buf && strncmp(buf, "/meet", 5) == 0) {
       MeetArgs meet_args = {
-	  .url = g_app_config.livekit_url,
-	  .token = g_app_config.livekit_token,
+          .url = g_app_config.livekit_url,
+          .token = g_app_config.livekit_token,
       };
       start_app((app_main_func_t)AppMeetMain, "LiveKit", (void *)&meet_args);
     }

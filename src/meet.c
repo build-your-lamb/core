@@ -311,7 +311,7 @@ int MeetConnect(const char *url, const char *token) {
 }
 
 int AppMeetMain(void *arg) {
-  MeetArgs* meet_args = (MeetArgs*)malloc(sizeof(MeetArgs));
+  MeetArgs *meet_args = (MeetArgs *)malloc(sizeof(MeetArgs));
   if (!meet_args) {
     LOGE("MeetArgs are NULL");
     return 1;

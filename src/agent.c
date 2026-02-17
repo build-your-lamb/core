@@ -1,15 +1,15 @@
+#include "agent.h"
+#include "peer.h"
+#include "utils.h"
+#include <cjson/cJSON.h>
+#include <curl/curl.h>
 #include <pthread.h>
 #include <signal.h>
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/time.h>
 #include <unistd.h>
-#include "utils.h"
-#include "peer.h"
-#include <curl/curl.h>
-#include <cjson/cJSON.h>
-#include <string.h>
-#include "agent.h"
 
 int g_interrupted = 0;
 PeerConnection *g_pc = NULL;
@@ -17,74 +17,80 @@ PeerConnectionState g_state;
 
 #define OPENAI_API_URL "https://api.openai.com/v1/realtime/calls"
 
-
 struct MemoryStruct {
-    char *memory;
-    size_t size;
+  char *memory;
+  size_t size;
 };
 
 // libcurl 回調函數
-static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb, void *userp) {
-    size_t realsize = size * nmemb;
-    struct MemoryStruct *mem = (struct MemoryStruct *)userp;
-    char *ptr = realloc(mem->memory, mem->size + realsize + 1);
-    if (!ptr) return 0;
-    mem->memory = ptr;
-    memcpy(&(mem->memory[mem->size]), contents, realsize);
-    mem->size += realsize;
-    mem->memory[mem->size] = 0;
-    return realsize;
+static size_t WriteMemoryCallback(void *contents, size_t size, size_t nmemb,
+                                  void *userp) {
+  size_t realsize = size * nmemb;
+  struct MemoryStruct *mem = (struct MemoryStruct *)userp;
+  char *ptr = realloc(mem->memory, mem->size + realsize + 1);
+  if (!ptr)
+    return 0;
+  mem->memory = ptr;
+  memcpy(&(mem->memory[mem->size]), contents, realsize);
+  mem->size += realsize;
+  mem->memory[mem->size] = 0;
+  return realsize;
 }
 
 /**
  * 獲取 OpenAI Realtime Token
  * 回傳：成功則回傳 token 字串 (需手動 free)，失敗回傳 NULL
  */
-char* get_openai_realtime_token(const char* api_key) {
-    CURL *curl;
-    CURLcode res;
-    struct MemoryStruct chunk = {malloc(1), 0};
-    char *token = NULL;
+char *get_openai_realtime_token(const char *api_key) {
+  CURL *curl;
+  CURLcode res;
+  struct MemoryStruct chunk = {malloc(1), 0};
+  char *token = NULL;
 
-    const char *url = "https://api.openai.com/v1/realtime/client_secrets";
-    const char *payload = "{\"session\": {\"type\": \"realtime\", \"model\": \"gpt-4o-realtime-preview-2024-10-01\", \"audio\": {\"output\": {\"voice\": \"marin\"}}}}";
+  const char *url = "https://api.openai.com/v1/realtime/client_secrets";
+  const char *payload = "{\"session\": {\"type\": \"realtime\", \"model\": "
+                        "\"gpt-4o-realtime-preview-2024-10-01\", \"audio\": "
+                        "{\"output\": {\"voice\": \"marin\"}}}}";
 
-    curl = curl_easy_init();
-    if (!curl) return NULL;
+  curl = curl_easy_init();
+  if (!curl)
+    return NULL;
 
-    struct curl_slist *headers = NULL;
-    char auth_header[256];
-    snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s", api_key);
-    
-    headers = curl_slist_append(headers, auth_header);
-    headers = curl_slist_append(headers, "Content-Type: application/json");
+  struct curl_slist *headers = NULL;
+  char auth_header[256];
+  snprintf(auth_header, sizeof(auth_header), "Authorization: Bearer %s",
+           api_key);
 
-    curl_easy_setopt(curl, CURLOPT_URL, url);
-    curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
-    curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
-    curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
-    curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
+  headers = curl_slist_append(headers, auth_header);
+  headers = curl_slist_append(headers, "Content-Type: application/json");
 
-    res = curl_easy_perform(curl);
+  curl_easy_setopt(curl, CURLOPT_URL, url);
+  curl_easy_setopt(curl, CURLOPT_POSTFIELDS, payload);
+  curl_easy_setopt(curl, CURLOPT_HTTPHEADER, headers);
+  curl_easy_setopt(curl, CURLOPT_WRITEFUNCTION, WriteMemoryCallback);
+  curl_easy_setopt(curl, CURLOPT_WRITEDATA, (void *)&chunk);
 
-    if (res == CURLE_OK) {
-	LOGI("Response from OpenAI API: %s", chunk.memory); // Debug print for the raw response
-        cJSON *json = cJSON_Parse(chunk.memory);
-        if (json) {
-                cJSON *value = cJSON_GetObjectItemCaseSensitive(json, "value");
-                if (cJSON_IsString(value) && (value->valuestring != NULL)) {
-                    token = strdup(value->valuestring); // 複製一份 token 用於回傳
-                }
-            cJSON_Delete(json);
-        }
+  res = curl_easy_perform(curl);
+
+  if (res == CURLE_OK) {
+    LOGI("Response from OpenAI API: %s",
+         chunk.memory); // Debug print for the raw response
+    cJSON *json = cJSON_Parse(chunk.memory);
+    if (json) {
+      cJSON *value = cJSON_GetObjectItemCaseSensitive(json, "value");
+      if (cJSON_IsString(value) && (value->valuestring != NULL)) {
+        token = strdup(value->valuestring); // 複製一份 token 用於回傳
+      }
+      cJSON_Delete(json);
     }
+  }
 
-    // 清理資源
-    curl_easy_cleanup(curl);
-    curl_slist_free_all(headers);
-    free(chunk.memory);
+  // 清理資源
+  curl_easy_cleanup(curl);
+  curl_slist_free_all(headers);
+  free(chunk.memory);
 
-    return token;
+  return token;
 }
 
 static void onconnectionstatechange(PeerConnectionState state, void *data) {
