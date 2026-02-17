@@ -311,11 +311,12 @@ int MeetConnect(const char *url, const char *token) {
 }
 
 int AppMeetMain(void *arg) {
-  MeetArgs *meet_args = (MeetArgs *)arg;
+  MeetArgs* meet_args = (MeetArgs*)malloc(sizeof(MeetArgs));
   if (!meet_args) {
     LOGE("MeetArgs are NULL");
     return 1;
   }
+  memcpy(meet_args, arg, sizeof(MeetArgs));
   int ret = MeetConnect(meet_args->url, meet_args->token);
   free(meet_args); // Free the allocated MeetArgs
   return ret;

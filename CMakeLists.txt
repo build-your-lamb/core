@@ -35,7 +35,7 @@ link_directories(
 add_executable(lamb
     src/main.c
     src/meet.c
-
+    src/agent.c
     src/utils.c
     src/telegram.c
     third_party11/inih/ini.c
@@ -46,9 +46,9 @@ add_executable(lamb
     protobuf/google/protobuf/timestamp.pb-c.c
 )
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng ${MEDIA_LIBS})
+target_link_libraries(lamb websockets protobuf-c peer curl nng cjson pthread ${MEDIA_LIBS})
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng ${MEDIA_LIBS})
+target_link_libraries(lamb websockets protobuf-c peer curl nng cjson pthread ${MEDIA_LIBS})
 
 include(ExternalProject)
 EXternalProject_Add(libpeer

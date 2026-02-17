@@ -3,6 +3,7 @@
 #include "telegram.h"
 #include "utils.h"
 #include "video.h"
+#include "agent.h"
 #include <cjson/cJSON.h>
 #include <curl/curl.h>
 #include <nng/nng.h>
@@ -19,6 +20,7 @@ typedef struct {
   char *telegram_bot_token;
   char *livekit_url;
   char *livekit_token;
+  char *openai_api_key;
 } AppConfig;
 
 // Global instance of our application configuration
@@ -26,6 +28,7 @@ static AppConfig g_app_config = {
     .telegram_bot_token = NULL,
     .livekit_url = NULL,
     .livekit_token = NULL,
+    .openai_api_key = NULL,
 };
 
 // Handler function for inih
@@ -43,6 +46,9 @@ static int config_ini_handler(void *user, const char *section, const char *name,
 
     pconfig->livekit_token = strdup(value);
     LOGI("Loaded LiveKit token: %s", pconfig->livekit_token);
+  } else if (MATCH("openai", "api_key")) {
+    pconfig->openai_api_key = strdup(value);
+    LOGI("Loaded OpenAI API Key");
   } else {
     return 0; // Unknown section/name, error
   }
@@ -103,6 +109,11 @@ int main(int argc, char *argv[]) {
          "[livekit] token=...");
     return 1;
   }
+  if (!g_app_config.openai_api_key) {
+    LOGE("OpenAI API Key not found in 'lamb.ini'. Please provide it under "
+         "[openai] api_key=...");
+    return 1;
+  }
   LOGI("Configuration loaded successfully from 'lamb.ini'");
 
   nng_socket sock;
@@ -115,6 +126,8 @@ int main(int argc, char *argv[]) {
   // Start video processing (assuming it doesn't need config directly from ini
   // for now)
   start_app((app_main_func_t)app_video_main, "video processing", NULL);
+  start_app((app_main_func_t)app_agent_main, "Agent", (void *)g_app_config.openai_api_key);
+
 
   if ((rv = nng_sub0_open(&sock)) != 0) {
     LOGE("nng_sub0_open: %s", nng_strerror(rv));
@@ -132,15 +145,11 @@ int main(int argc, char *argv[]) {
     int rv = nng_recv(sock, &buf, &sz, NNG_FLAG_ALLOC);
     printf("Received message: %.*s\n", (int)sz, buf);
     if (buf && strncmp(buf, "/meet", 5) == 0) {
-      MeetArgs *meet_args = (MeetArgs *)malloc(sizeof(MeetArgs));
-      if (!meet_args) {
-        LOGE("Failed to allocate MeetArgs");
-        free(buf);
-        continue;
-      }
-      meet_args->url = g_app_config.livekit_url;
-      meet_args->token = g_app_config.livekit_token;
-      start_app((app_main_func_t)AppMeetMain, "LiveKit", (void *)meet_args);
+      MeetArgs meet_args = {
+	  .url = g_app_config.livekit_url,
+	  .token = g_app_config.livekit_token,
+      };
+      start_app((app_main_func_t)AppMeetMain, "LiveKit", (void *)&meet_args);
     }
     free(buf);
   }
@@ -153,6 +162,7 @@ int main(int argc, char *argv[]) {
   free(g_app_config.telegram_bot_token);
   free(g_app_config.livekit_url);
   free(g_app_config.livekit_token);
+  free(g_app_config.openai_api_key);
 
   return 0;
 }
