@@ -1,4 +1,5 @@
 #include "agent.h"
+#include "audio.h" // Added for audio functionality
 #include "ini.h" // For inih library
 #include "meet.h"
 #include "telegram.h"
@@ -116,6 +117,8 @@ int main(int argc, char *argv[]) {
   }
   LOGI("Configuration loaded successfully from 'lamb.ini'");
 
+
+
   nng_socket sock;
   int rv;
 
@@ -128,6 +131,7 @@ int main(int argc, char *argv[]) {
   start_app((app_main_func_t)app_video_main, "video processing", NULL);
   start_app((app_main_func_t)app_agent_main, "Agent",
             (void *)g_app_config.openai_api_key);
+  start_app((app_main_func_t)app_audio_main, "Audio Capture", NULL);
 
   if ((rv = nng_sub0_open(&sock)) != 0) {
     LOGE("nng_sub0_open: %s", nng_strerror(rv));
@@ -156,6 +160,7 @@ int main(int argc, char *argv[]) {
 
   app_telegram_quit();
   AppMeetQuit();
+  app_audio_quit(); // Added for audio cleanup
   nng_close(sock);
 
   // Free allocated config strings

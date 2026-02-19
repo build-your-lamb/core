@@ -4,11 +4,18 @@ project(lamb)
 
 # if arm, use rk_media else use dummy
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
-    set(MEDIA_SRC src/rk_media.c)
-    set(MEDIA_LIBS rockit rockchip_mpp rga ssl crypto mount blkid intl iconv z)
+    set(MEDIA_SRC src/rk_video.c)
+    set(MEDIA_LIBS rockit rockchip_mpp rga ssl crypto mount blkid intl iconv z rkaiq)
     set(EXTERNAL_INCLUDE_DIRS
         /home/user/Workspace/luckfox-pico/sysdrv/source/buildroot/buildroot-2023.02.6/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/include
         /home/user/Workspace/luckfox-pico/media/out/include
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/common/
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/iq_parser_v2
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/iq_parser
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/algos
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/xcore/
+        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/uAPI2/
     )
     set(EXTERNAL_LINK_DIRS
         /home/user/Workspace/luckfox-pico/sysdrv/source/buildroot/buildroot-2023.02.6/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib
@@ -44,11 +51,12 @@ add_executable(lamb
     protobuf/livekit_rtc.pb-c.c
     protobuf/livekit_metrics.pb-c.c
     protobuf/google/protobuf/timestamp.pb-c.c
+    src/audio.c
 )
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng cjson pthread ${MEDIA_LIBS})
+target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread m ${MEDIA_LIBS})
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng cjson pthread ${MEDIA_LIBS})
+target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread m ${MEDIA_LIBS})
 
 include(ExternalProject)
 EXternalProject_Add(libpeer
@@ -65,5 +73,12 @@ EXternalProject_Add(nng
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
 )
 
-add_dependencies(lamb libpeer nng)
+EXternalProject_Add(opus
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/opus
+  CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/dist
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+)
+
+add_dependencies(lamb libpeer nng opus)
 add_compile_definitions(INI_MAX_LINE=10000)
