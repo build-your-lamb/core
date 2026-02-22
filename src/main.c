@@ -1,5 +1,5 @@
 #include "agent.h"
-#include "audio.h" // Added for audio functionality
+#include "audio.h"
 #include "display.h"
 #include "ini.h" // For inih library
 #include "meet.h"
@@ -63,12 +63,27 @@ typedef int (*app_main_func_t)(void *);
 typedef struct {
   app_main_func_t func;
   void *arg;
+  const char *name;
+  int retry_limit;
+  int retry_delay_ms;
 } ThreadArgs;
 
 void *thread_adapter(void *args) {
   ThreadArgs *thread_args = (ThreadArgs *)args;
-  int result = thread_args->func(thread_args->arg);
-  printf("\n[系統] App 結束，回傳值為: %d\n", result);
+  int attempt = 0;
+  int result = 0;
+  while (1) {
+    result = thread_args->func(thread_args->arg);
+    printf("\n[系統] App 結束 (%s)，回傳值為: %d\n", thread_args->name,
+           result);
+    if (result == 0 || attempt >= thread_args->retry_limit) {
+      break;
+    }
+    attempt++;
+    printf("[系統] App %s 異常結束，準備重啟 (%d/%d)\n", thread_args->name,
+           attempt, thread_args->retry_limit);
+    usleep(thread_args->retry_delay_ms * 1000);
+  }
   free(thread_args); // Free the dynamically allocated ThreadArgs
   return (void *)(intptr_t)result;
 }
@@ -82,6 +97,9 @@ void start_app(app_main_func_t func, const char *name, void *arg) {
   }
   thread_args->func = func;
   thread_args->arg = arg;
+  thread_args->name = name;
+  thread_args->retry_limit = 1;
+  thread_args->retry_delay_ms = 500;
 
   printf("[系統] 正在啟動: %s\n", name);
   pthread_create(&tid, NULL, thread_adapter, (void *)thread_args);
@@ -127,12 +145,10 @@ int main(int argc, char *argv[]) {
   start_app((app_main_func_t)app_telegram_main, "Telegram Bot",
             (void *)g_app_config.telegram_bot_token);
 
-  // Start video processing (assuming it doesn't need config directly from ini
-  // for now)
-  start_app((app_main_func_t)app_video_main, "video processing", NULL);
-  start_app((app_main_func_t)app_agent_main, "Agent",
-            (void *)g_app_config.openai_api_key);
-  start_app((app_main_func_t)app_audio_main, "Audio Capture", NULL);
+  start_app((app_main_func_t)app_video_main, "Video", NULL);
+//  start_app((app_main_func_t)app_agent_main, "Agent",
+//            (void *)g_app_config.openai_api_key);
+  start_app((app_main_func_t)app_audio_main, "Audio", NULL);
   start_app((app_main_func_t)app_display_main, "Display", NULL);
 
   if ((rv = nng_sub0_open(&sock)) != 0) {
@@ -162,7 +178,7 @@ int main(int argc, char *argv[]) {
 
   app_telegram_quit();
   AppMeetQuit();
-  app_audio_quit(); // Added for audio cleanup
+  app_audio_quit();
   nng_close(sock);
 
   // Free allocated config strings

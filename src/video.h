@@ -4,8 +4,9 @@
 
 #define TOPIC_VIDEO_COMPRESSED "inproc://video.compressed"
 #define TOPIC_VIDEO_RAW "inproc://video.raw"
+#define TOPIC_VIDEO_WEBRTC "inproc://video.webrtc"
 
-int app_video_main();
+int app_video_main(void *arg);
 
 void app_video_quit();
 

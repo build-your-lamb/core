@@ -1,5 +1,6 @@
 #include "meet.h" // Renamed from livekit.h
 #include "peer.h" // From webrtc.c
+#include "audio.h"
 #include "utils.h"
 #include "utlist.h"
 #include "video.h"       // From webrtc.c
@@ -31,6 +32,7 @@ int g_video_track_published_ = 0;
 WriteableBuffer *g_wb_queue_ = NULL;
 uint8_t g_received_buffer_[8192];
 int g_received_offset_ = 0;
+static volatile int g_meet_exit_code_ = 0;
 
 static nng_socket g_video_nng_sub_sock_;
 static pthread_t g_video_subscriber_tid_;
@@ -39,6 +41,9 @@ static bool g_video_subscriber_running_ = false;
 static nng_socket g_audio_nng_sub_sock_; // New NNG socket for audio
 static pthread_t g_audio_subscriber_tid_;
 static bool g_audio_subscriber_running_ = false;
+
+static nng_socket g_webrtc_video_pub_sock_ = { .id = -1 };
+static nng_socket g_webrtc_audio_pub_sock_ = { .id = -1 };
 
 static const char *
 ResponseMessageToString(Livekit__SignalResponse__MessageCase message_case) {
@@ -197,6 +202,7 @@ static void MeetHandleResponse(Livekit__SignalResponse *response,
   case LIVEKIT__SIGNAL_RESPONSE__MESSAGE_LEAVE:
     LOGW("Leave reason: %d, action: %d, %d", response->leave->reason,
          response->leave->action, response->leave->can_reconnect);
+    g_meet_exit_code_ = 1;
     break;
   case LIVEKIT__SIGNAL_RESPONSE__MESSAGE_MUTE:
     LOGI("Mute message received\n");
@@ -255,6 +261,7 @@ static struct lws_protocols protocols[] = {
     {"ws", MeetCallback, sizeof(struct PerSessionData), 0}, {NULL, NULL, 0, 0}};
 
 int MeetConnect(const char *url, const char *token) {
+  g_meet_exit_code_ = 0;
   struct lws_context_creation_info info = {0};
   info.options = LWS_SERVER_OPTION_DO_SSL_GLOBAL_INIT;
   info.port = CONTEXT_PORT_NO_LISTEN;
@@ -287,6 +294,9 @@ int MeetConnect(const char *url, const char *token) {
   //  NNG_FLAG_NONBLOCK);
 
   while (1) {
+    if (g_meet_exit_code_ != 0) {
+      break;
+    }
     lws_service(context, 1);
     // sub
     uint8_t *video_msg;
@@ -307,7 +317,7 @@ int MeetConnect(const char *url, const char *token) {
   pthread_join(g_video_subscriber_tid_, NULL);
   g_audio_subscriber_running_ = false;
   pthread_join(g_audio_subscriber_tid_, NULL);
-  return 0;
+  return g_meet_exit_code_;
 }
 
 int AppMeetMain(void *arg) {
@@ -425,23 +435,105 @@ static void MeetWebrtcSubscriberOnStateChange(PeerConnectionState state,
 static void MeetWebrtcSubscriberOnIceCandidate(char *description,
                                                void *userdata) {}
 
+static uint64_t now_ms(void) {
+  struct timespec ts;
+  clock_gettime(CLOCK_MONOTONIC, &ts);
+  return (uint64_t)ts.tv_sec * 1000ULL + (uint64_t)ts.tv_nsec / 1000000ULL;
+}
+
 static void *MeetWebrtcDataHandlerThread(void *userdata) {
-  nng_socket sock;
-  // sub
-  nng_sub0_open(&sock);
-  nng_socket_set_string(sock, NNG_OPT_SUB_SUBSCRIBE, "");
-  nng_dial(sock, TOPIC_VIDEO_COMPRESSED, NULL, NNG_FLAG_NONBLOCK);
+  nng_socket video_sock;
+  nng_socket audio_sock;
+  int rv;
+  nng_dialer video_dialer;
+  nng_dialer audio_dialer;
+  bool video_connected = false;
+  bool audio_connected = false;
+  uint64_t next_video_retry_ms = 0;
+  uint64_t next_audio_retry_ms = 0;
+  const uint64_t retry_interval_ms = 200;
+  // video sub
+  if ((rv = nng_sub0_open(&video_sock)) != 0) {
+    LOGE("MeetWebrtcDataHandlerThread: nng_sub0_open video: %s",
+         nng_strerror(rv));
+    return NULL;
+  }
+  nng_socket_set(video_sock, NNG_OPT_SUB_SUBSCRIBE, "", 0);
+  if ((rv = nng_dialer_create(&video_dialer, video_sock,
+                              TOPIC_VIDEO_COMPRESSED)) != 0) {
+    LOGE("MeetWebrtcDataHandlerThread: nng_dialer_create video: %s",
+         nng_strerror(rv));
+    nng_close(video_sock);
+    return NULL;
+  }
+
+  // audio sub
+  if ((rv = nng_sub0_open(&audio_sock)) != 0) {
+    LOGE("MeetWebrtcDataHandlerThread: nng_sub0_open audio: %s",
+         nng_strerror(rv));
+    nng_dialer_close(video_dialer);
+    nng_close(video_sock);
+    return NULL;
+  }
+  nng_socket_set(audio_sock, NNG_OPT_SUB_SUBSCRIBE, "", 0);
+  if ((rv = nng_dialer_create(&audio_dialer, audio_sock,
+                              TOPIC_AUDIO_COMPRESSED)) != 0) {
+    LOGE("MeetWebrtcDataHandlerThread: nng_dialer_create audio: %s",
+         nng_strerror(rv));
+    nng_close(audio_sock);
+    nng_dialer_close(video_dialer);
+    nng_close(video_sock);
+    return NULL;
+  }
 
   while (!g_terminate_) {
+    uint64_t now = now_ms();
+    if (!video_connected && now >= next_video_retry_ms) {
+      rv = nng_dialer_start(video_dialer, NNG_FLAG_NONBLOCK);
+      if (rv == 0) {
+        video_connected = true;
+        LOGI("MeetWebrtcDataHandlerThread: video subscribed");
+      } else {
+        LOGW("MeetWebrtcDataHandlerThread: nng_dial video: %s",
+             nng_strerror(rv));
+        next_video_retry_ms = now + retry_interval_ms;
+      }
+    }
+    if (!audio_connected && now >= next_audio_retry_ms) {
+      rv = nng_dialer_start(audio_dialer, NNG_FLAG_NONBLOCK);
+      if (rv == 0) {
+        audio_connected = true;
+        LOGI("MeetWebrtcDataHandlerThread: audio subscribed");
+      } else {
+        LOGW("MeetWebrtcDataHandlerThread: nng_dial audio: %s",
+             nng_strerror(rv));
+        next_audio_retry_ms = now + retry_interval_ms;
+      }
+    }
+
     uint8_t *buf = NULL;
     size_t sz;
-    int rv = nng_recv(sock, &buf, &sz, NNG_FLAG_ALLOC);
+    int rv = nng_recv(video_sock, &buf, &sz,
+                      NNG_FLAG_ALLOC | NNG_FLAG_NONBLOCK);
     if (rv == 0) {
       peer_connection_send_video(g_publisher_peer_connection_, buf, sz);
       nng_free(buf, sz);
     }
+
+    buf = NULL;
+    sz = 0;
+    rv = nng_recv(audio_sock, &buf, &sz, NNG_FLAG_ALLOC | NNG_FLAG_NONBLOCK);
+    if (rv == 0) {
+      peer_connection_send_audio(g_publisher_peer_connection_, buf, sz);
+      nng_free(buf, sz);
+    }
     usleep(1000);
   }
+
+  nng_dialer_close(video_dialer);
+  nng_dialer_close(audio_dialer);
+  nng_close(video_sock);
+  nng_close(audio_sock);
   return NULL;
 }
 
@@ -460,11 +552,17 @@ static void MeetWebrtcSubscriberThread(void *userdata) {
 }
 
 static void OnVideoTrack(uint8_t *data, size_t size, void *userdata) {
-  //  media_push_video(data, size);
+  (void)userdata;
+  if (nng_socket_id(g_webrtc_video_pub_sock_) != -1) {
+    nng_send(g_webrtc_video_pub_sock_, data, size, NNG_FLAG_NONBLOCK);
+  }
 }
 
 static void OnAudioTrack(uint8_t *data, size_t size, void *userdata) {
-  // LOGD("Received audio track data of size: %zu", size);
+  (void)userdata;
+  if (nng_socket_id(g_webrtc_audio_pub_sock_) != -1) {
+    nng_send(g_webrtc_audio_pub_sock_, data, size, NNG_FLAG_NONBLOCK);
+  }
 }
 
 void MeetWebrtcSendVideoData(uint8_t *data, size_t size) {
@@ -475,6 +573,7 @@ void MeetWebrtcSendVideoData(uint8_t *data, size_t size) {
 
 void MeetWebrtcSendAudioData(uint8_t *data, size_t size) {
   if (g_publisher_peer_connection_) {
+	  LOGI("Sending audio data of size %zu", size);
     peer_connection_send_audio(g_publisher_peer_connection_, data, size);
   }
 }
@@ -484,6 +583,26 @@ void MeetWebrtcCreatePeerConnections() {
   //     MeetWebrtcOnVideoData,
   //     MeetWebrtcOnAudioData
   //);
+  if (nng_pub0_open(&g_webrtc_video_pub_sock_) != 0) {
+    LOGE("MeetWebrtcCreatePeerConnections: video pub open failed");
+    g_webrtc_video_pub_sock_.id = -1;
+  } else if (nng_listen(g_webrtc_video_pub_sock_, TOPIC_VIDEO_WEBRTC, NULL, 0) !=
+             0) {
+    LOGE("MeetWebrtcCreatePeerConnections: video pub listen failed");
+    nng_close(g_webrtc_video_pub_sock_);
+    g_webrtc_video_pub_sock_.id = -1;
+  }
+
+  if (nng_pub0_open(&g_webrtc_audio_pub_sock_) != 0) {
+    LOGE("MeetWebrtcCreatePeerConnections: audio pub open failed");
+    g_webrtc_audio_pub_sock_.id = -1;
+  } else if (nng_listen(g_webrtc_audio_pub_sock_, TOPIC_AUDIO_WEBRTC, NULL, 0) !=
+             0) {
+    LOGE("MeetWebrtcCreatePeerConnections: audio pub listen failed");
+    nng_close(g_webrtc_audio_pub_sock_);
+    g_webrtc_audio_pub_sock_.id = -1;
+  }
+
   PeerConfiguration publisher_config = {
       .ice_servers =
           {
@@ -552,6 +671,15 @@ void MeetWebrtcDestroyPeerConnections() {
   if (g_publisher_peer_connection_) {
     peer_connection_destroy(g_publisher_peer_connection_);
     g_publisher_peer_connection_ = NULL;
+  }
+
+  if (nng_socket_id(g_webrtc_video_pub_sock_) != -1) {
+    nng_close(g_webrtc_video_pub_sock_);
+    g_webrtc_video_pub_sock_.id = -1;
+  }
+  if (nng_socket_id(g_webrtc_audio_pub_sock_) != -1) {
+    nng_close(g_webrtc_audio_pub_sock_);
+    g_webrtc_audio_pub_sock_.id = -1;
   }
 
   peer_deinit();

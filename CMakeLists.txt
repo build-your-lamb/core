@@ -2,27 +2,23 @@ cmake_minimum_required(VERSION 3.1)
 
 project(lamb)
 
-# if arm, use rk_media else use dummy
+option(USE_GST_MEDIA "Use GStreamer for audio/video pipelines" ON)
+
+if(USE_GST_MEDIA)
+    find_package(PkgConfig REQUIRED)
+    pkg_check_modules(GST REQUIRED gstreamer-1.0 gstreamer-app-1.0)
+endif()
+
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "arm")
-    set(MEDIA_SRC src/rk_video.c)
-    set(MEDIA_LIBS rockit rockchip_mpp rga ssl crypto mount blkid intl iconv z rkaiq)
     set(EXTERNAL_INCLUDE_DIRS
-        /home/user/Workspace/luckfox-pico/sysdrv/source/buildroot/buildroot-2023.02.6/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/include
-        /home/user/Workspace/luckfox-pico/media/out/include
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/common/
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/iq_parser_v2
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/iq_parser
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/algos
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/xcore/
-        /home/user/Workspace/luckfox-pico/media/out/include/rkaiq/uAPI2/
+      /home/user/Workspace/lamb/core/sysroot/include
     )
     set(EXTERNAL_LINK_DIRS
-        /home/user/Workspace/luckfox-pico/sysdrv/source/buildroot/buildroot-2023.02.6/output/host/arm-buildroot-linux-uclibcgnueabihf/sysroot/usr/lib
-        /home/user/Workspace/luckfox-pico/media/out/lib
+	   /home/user/Workspace/lamb/core/sysroot/usr/lib/aarch64-linux-gnu 
+	    #/home/user/Workspace/luckfox-pico/media/out/lib
     )
 else()
-    set(MEDIA_SRC src/test_video.c)
+    set(EXTERNAL_LIBS X11)
 endif()
 
 
@@ -39,24 +35,41 @@ link_directories(
     ${EXTERNAL_LINK_DIRS}
 )
 
-add_executable(lamb
+set(LAMB_SOURCES
     src/main.c
     src/meet.c
     src/agent.c
     src/utils.c
     src/telegram.c
+    src/display.c
     third_party11/inih/ini.c
-    ${MEDIA_SRC}
     protobuf/livekit_models.pb-c.c
     protobuf/livekit_rtc.pb-c.c
     protobuf/livekit_metrics.pb-c.c
     protobuf/google/protobuf/timestamp.pb-c.c
-    src/audio.c
 )
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread m ${MEDIA_LIBS})
+if(USE_GST_MEDIA)
+    list(APPEND LAMB_SOURCES
+        src/gst_audio.c
+        src/gst_video.c
+    )
+else()
+    list(APPEND LAMB_SOURCES
+        src/audio.c
+        src/test_video.c
+    )
+endif()
 
-target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread m ${MEDIA_LIBS})
+add_executable(lamb ${LAMB_SOURCES})
+
+if(USE_GST_MEDIA)
+    target_include_directories(lamb PRIVATE ${GST_INCLUDE_DIRS})
+    target_link_directories(lamb PRIVATE ${GST_LIBRARY_DIRS})
+    target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread ${MEDIA_LIBS} lvgl_linux lvgl lvgl_linux lvgl_thorvg stdc++ freetype ${GST_LIBRARIES} m ${EXTERNAL_LIBS})
+else()
+    target_link_libraries(lamb websockets protobuf-c peer curl nng opus asound cjson pthread ${MEDIA_LIBS} lvgl_linux lvgl lvgl_linux lvgl_thorvg stdc++ freetype m ${EXTERNAL_LIBS})
+endif()
 
 include(ExternalProject)
 EXternalProject_Add(libpeer
@@ -80,5 +93,12 @@ EXternalProject_Add(opus
     -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
 )
 
-add_dependencies(lamb libpeer nng opus)
+EXternalProject_Add(lv_port_linux
+  SOURCE_DIR ${CMAKE_CURRENT_SOURCE_DIR}/third_party/lv_port_linux
+  CMAKE_ARGS
+    -DCMAKE_INSTALL_PREFIX=${CMAKE_BINARY_DIR}/dist
+    -DCMAKE_TOOLCHAIN_FILE=${CMAKE_TOOLCHAIN_FILE}
+)
+
+add_dependencies(lamb libpeer nng opus lv_port_linux)
 add_compile_definitions(INI_MAX_LINE=10000)

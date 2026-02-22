@@ -141,7 +141,8 @@ void video_deinit() {
   }
 }
 
-int app_video_main() {
+int app_video_main(void *arg) {
+  (void)arg;
   if (video_init() < 0) {
     return -1;
   }
