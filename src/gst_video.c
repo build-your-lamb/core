@@ -12,13 +12,17 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char CAM_PIPELINE[] =
-    "videotestsrc pattern=ball ! video/x-raw,framerate=30/1,width=640,height=480 "
-    "! videoconvert ! openh264enc ! appsink name=sink";
-static const char DIS_PIPELINE[] =
+static const char DEFAULT_CAM_PIPELINE[] =
+    "libcamerasrc ! video/x-raw,width=1280,height=720,format=NV12 ! v4l2convert "
+    "! v4l2h264enc extra-controls=\"controls,repeat_sequence_header=1\" "
+    "! video/x-h264,level=(string)4 ! appsink name=sink";
+static const char DEFAULT_DIS_PIPELINE[] =
     "appsrc name=src is-live=true do-timestamp=true format=time "
-    "! queue max-size-buffers=1 leaky=downstream "
-    "! h264parse ! avdec_h264 ! videoconvert ! autovideosink sync=false";
+    "! queue ! h264parse ! v4l2h264dec qos=false output-io-mode=4 "
+    "capture-io-mode=4 ! glimagesink";
+
+static char *g_cam_pipeline_desc = NULL;
+static char *g_dis_pipeline_desc = NULL;
 
 static GstElement *g_cam_pipeline = NULL;
 static GstElement *g_cam_sink = NULL;
@@ -27,6 +31,26 @@ static GstElement *g_dis_src = NULL;
 static nng_socket g_nng_video_pub_sock = { .id = -1 };
 static nng_socket g_nng_video_sub_sock = { .id = -1 };
 static volatile bool g_running = false;
+
+static const char *get_cam_pipeline_desc(void) {
+  return g_cam_pipeline_desc ? g_cam_pipeline_desc : DEFAULT_CAM_PIPELINE;
+}
+
+static const char *get_dis_pipeline_desc(void) {
+  return g_dis_pipeline_desc ? g_dis_pipeline_desc : DEFAULT_DIS_PIPELINE;
+}
+
+void app_video_set_pipelines(const char *cam_pipeline,
+                             const char *dis_pipeline) {
+  if (cam_pipeline && cam_pipeline[0] != '\0') {
+    free(g_cam_pipeline_desc);
+    g_cam_pipeline_desc = strdup(cam_pipeline);
+  }
+  if (dis_pipeline && dis_pipeline[0] != '\0') {
+    free(g_dis_pipeline_desc);
+    g_dis_pipeline_desc = strdup(dis_pipeline);
+  }
+}
 
 static GstFlowReturn on_video_data(GstElement *sink, void *data) {
   (void)data;
@@ -91,14 +115,14 @@ int app_video_main(void *arg) {
     return 1;
   }
 
-  g_cam_pipeline = gst_parse_launch(CAM_PIPELINE, NULL);
+  g_cam_pipeline = gst_parse_launch(get_cam_pipeline_desc(), NULL);
   if (!g_cam_pipeline) {
     LOGE("app_video_main: failed to create cam pipeline");
     app_video_quit();
     return 1;
   }
 
-  g_dis_pipeline = gst_parse_launch(DIS_PIPELINE, NULL);
+  g_dis_pipeline = gst_parse_launch(get_dis_pipeline_desc(), NULL);
   if (!g_dis_pipeline) {
     LOGE("app_video_main: failed to create display pipeline");
     app_video_quit();
@@ -193,6 +217,11 @@ void app_video_quit(void) {
     g_object_unref(g_dis_pipeline);
     g_dis_pipeline = NULL;
   }
+
+  free(g_cam_pipeline_desc);
+  g_cam_pipeline_desc = NULL;
+  free(g_dis_pipeline_desc);
+  g_dis_pipeline_desc = NULL;
 
   if (nng_socket_id(g_nng_video_sub_sock) != -1) {
     nng_close(g_nng_video_sub_sock);

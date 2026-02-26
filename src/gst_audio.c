@@ -12,10 +12,13 @@
 #include <string.h>
 #include <unistd.h>
 
-static const char MIC_PIPELINE[] =
+static const char DEFAULT_MIC_PIPELINE[] =
     "audiotestsrc ! opusenc ! appsink name=sink";
-static const char SPK_PIPELINE[] =
+static const char DEFAULT_SPK_PIPELINE[] =
     "appsrc name=src format=time ! opusparse ! opusdec ! alsasink";
+
+static char *g_mic_pipeline_desc = NULL;
+static char *g_spk_pipeline_desc = NULL;
 
 static GstElement *g_mic_pipeline = NULL;
 static GstElement *g_mic_sink = NULL;
@@ -24,6 +27,26 @@ static GstElement *g_spk_src = NULL;
 static nng_socket g_nng_audio_pub_sock = { .id = -1 };
 static nng_socket g_nng_audio_sub_sock = { .id = -1 };
 static volatile bool g_running = false;
+
+static const char *get_mic_pipeline_desc(void) {
+  return g_mic_pipeline_desc ? g_mic_pipeline_desc : DEFAULT_MIC_PIPELINE;
+}
+
+static const char *get_spk_pipeline_desc(void) {
+  return g_spk_pipeline_desc ? g_spk_pipeline_desc : DEFAULT_SPK_PIPELINE;
+}
+
+void app_audio_set_pipelines(const char *mic_pipeline,
+                             const char *spk_pipeline) {
+  if (mic_pipeline && mic_pipeline[0] != '\0') {
+    free(g_mic_pipeline_desc);
+    g_mic_pipeline_desc = strdup(mic_pipeline);
+  }
+  if (spk_pipeline && spk_pipeline[0] != '\0') {
+    free(g_spk_pipeline_desc);
+    g_spk_pipeline_desc = strdup(spk_pipeline);
+  }
+}
 
 static GstFlowReturn on_audio_data(GstElement *sink, void *data) {
   (void)data;
@@ -88,14 +111,14 @@ int app_audio_main(void *arg) {
     return 1;
   }
 
-  g_mic_pipeline = gst_parse_launch(MIC_PIPELINE, NULL);
+  g_mic_pipeline = gst_parse_launch(get_mic_pipeline_desc(), NULL);
   if (!g_mic_pipeline) {
     LOGE("app_audio_main: failed to create mic pipeline");
     app_audio_quit();
     return 1;
   }
 
-  g_spk_pipeline = gst_parse_launch(SPK_PIPELINE, NULL);
+  g_spk_pipeline = gst_parse_launch(get_spk_pipeline_desc(), NULL);
   if (!g_spk_pipeline) {
     LOGE("app_audio_main: failed to create spk pipeline");
     app_audio_quit();
@@ -189,6 +212,11 @@ void app_audio_quit(void) {
     g_object_unref(g_spk_pipeline);
     g_spk_pipeline = NULL;
   }
+
+  free(g_mic_pipeline_desc);
+  g_mic_pipeline_desc = NULL;
+  free(g_spk_pipeline_desc);
+  g_spk_pipeline_desc = NULL;
 
   if (nng_socket_id(g_nng_audio_sub_sock) != -1) {
     nng_close(g_nng_audio_sub_sock);

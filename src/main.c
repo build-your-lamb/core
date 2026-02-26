@@ -23,6 +23,10 @@ typedef struct {
   char *livekit_url;
   char *livekit_token;
   char *openai_api_key;
+  char *video_cam_pipeline;
+  char *video_dis_pipeline;
+  char *audio_mic_pipeline;
+  char *audio_spk_pipeline;
 } AppConfig;
 
 // Global instance of our application configuration
@@ -31,6 +35,10 @@ static AppConfig g_app_config = {
     .livekit_url = NULL,
     .livekit_token = NULL,
     .openai_api_key = NULL,
+    .video_cam_pipeline = NULL,
+    .video_dis_pipeline = NULL,
+    .audio_mic_pipeline = NULL,
+    .audio_spk_pipeline = NULL,
 };
 
 // Handler function for inih
@@ -51,6 +59,14 @@ static int config_ini_handler(void *user, const char *section, const char *name,
   } else if (MATCH("openai", "api_key")) {
     pconfig->openai_api_key = strdup(value);
     LOGI("Loaded OpenAI API Key");
+  } else if (MATCH("video", "cam")) {
+    pconfig->video_cam_pipeline = strdup(value);
+  } else if (MATCH("video", "dis")) {
+    pconfig->video_dis_pipeline = strdup(value);
+  } else if (MATCH("audio", "mic")) {
+    pconfig->audio_mic_pipeline = strdup(value);
+  } else if (MATCH("audio", "spk")) {
+    pconfig->audio_spk_pipeline = strdup(value);
   } else {
     return 0; // Unknown section/name, error
   }
@@ -136,6 +152,11 @@ int main(int argc, char *argv[]) {
   }
   LOGI("Configuration loaded successfully from 'lamb.ini'");
 
+  app_video_set_pipelines(g_app_config.video_cam_pipeline,
+                          g_app_config.video_dis_pipeline);
+  app_audio_set_pipelines(g_app_config.audio_mic_pipeline,
+                          g_app_config.audio_spk_pipeline);
+
 
 
   nng_socket sock;
@@ -186,5 +207,9 @@ int main(int argc, char *argv[]) {
   free(g_app_config.livekit_url);
   free(g_app_config.livekit_token);
   free(g_app_config.openai_api_key);
+  free(g_app_config.video_cam_pipeline);
+  free(g_app_config.video_dis_pipeline);
+  free(g_app_config.audio_mic_pipeline);
+  free(g_app_config.audio_spk_pipeline);
   return 0;
 }

@@ -8,6 +8,9 @@
 
 int app_video_main(void *arg);
 
+void app_video_set_pipelines(const char *cam_pipeline,
+                             const char *dis_pipeline);
+
 void app_video_quit();
 
 #endif // VIDEO_H_

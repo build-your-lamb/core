@@ -13,6 +13,8 @@
 #define TOPIC_AUDIO_WEBRTC "inproc://audio.webrtc"
 
 int app_audio_main(void *arg);
+void app_audio_set_pipelines(const char *mic_pipeline,
+                             const char *spk_pipeline);
 void app_audio_quit(void);
 
 #endif // AUDIO_H
